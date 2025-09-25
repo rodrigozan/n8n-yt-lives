@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
-const RTMP_URL = process.env.RTMP_URL;
+const RTMP_URL = process.env.RTMP_URL || 'rtmp://a.rtmp.youtube.com/live2/3p2j-2x3u-kha7-51qu-ey9e';
 const BASE_VIDEO = process.env.BASE_VIDEO || '/srv/lofi/video/christian-lofi.mp4';
 const AUDIO_FILE = process.env.AUDIO_FILE || '/srv/lofi/audio/lofi-worship-playlist.m4a';
 const LIVE_TITLE = process.env.LIVE_TITLE || 'Aslan Lofi Worship Chill Music  #lofi #lofichillbeats #lofiworship';
