@@ -26,33 +26,35 @@ const CTA_SECONDS = Number(process.env.CTA_SECONDS || 5);
 let ffmpegProc = null;
 
 function buildFilterComplex({ trackText, showCTA, ctaText, trackSeconds, ctaSeconds }) {
-  // Use fontes padrão do sistema. Se quiser outra fonte, ajuste o fontfile para um TTF existente.
-  // Caixa inferior para título da faixa com pequeno fade (alpha).
-  const parts = [
-    "[1:a]loudnorm=I=-14:TP=-1.5:LRA=11[aud]",
+  const trackTextSan = sanitizeTextForDrawtext(trackText);
+  const ctaTextSan = sanitizeTextForDrawtext(ctaText);
+
+  const overlays = [];
+
+  // Normalização de áudio
+  overlays.push(`[1:a]loudnorm=I=-14:TP=-1.5:LRA=11[aud]`);
+
+  // Caixa inferior + texto da faixa (use w/h minúsculos)
+  overlays.push(
     `[0:v]format=yuv420p,` +
-      `drawbox=x=0:y=H-120:w=W:h=120:color=0x00000088:t=fill:enable='between(t,0,${trackSeconds})',` +
+      `drawbox=x=0:y=h-120:w=w:h=120:color=0x00000088:t=fill:enable='between(t,0,${trackSeconds})',` +
       `drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:` +
-      `text='${trackText.replace(/:/g, '\\:').replace(/'/g, "\\'")}'` +
-      `:x=20:y=H-80:fontsize=36:fontcolor=white:` +
+      `text='${trackTextSan}':x=20:y=h-80:fontsize=36:fontcolor=white:` +
       `alpha='if(lt(t,0.5),(t/0.5),if(lt(t,${trackSeconds - 0.5}),1,max(0,(${trackSeconds}-t)/0.5)))':` +
       `enable='between(t,0,${trackSeconds})'[vtmp]`
-  ];
+  );
 
   if (showCTA) {
-    // CTA no topo, mostrado junto no início por ctaSeconds
-    parts.push(
+    overlays.push(
       `[vtmp]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:` +
-      `text='${ctaText.replace(/:/g, '\\:').replace(/'/g, "\\'")}'` +
-      `:x='(w-text_w)/2':y=40:fontsize=30:fontcolor=white:box=1:boxcolor=0x00000088:` +
+      `text='${ctaTextSan}':x='(w-text_w)/2':y=40:fontsize=30:fontcolor=white:box=1:boxcolor=0x00000088:` +
       `enable='between(t,0,${ctaSeconds})'[vout]`
     );
   } else {
-    parts.push(`[vtmp]copy[vout]`);
+    overlays.push(`[vtmp]copy[vout]`);
   }
 
-  // Junta filtros de áudio e vídeo no graph completo
-  return `${parts.join(';')}`;
+  return overlays.join(';');
 }
 
 function startFFmpegOnce({ baseVideo, audioFile, rtmpUrl, trackText, showCTA, ctaText, trackSeconds, ctaSeconds }) {
