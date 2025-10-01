@@ -74,14 +74,26 @@ function buildFilterComplex({ trackText, showCTA, ctaText, trackSeconds, ctaSeco
   return parts.join(';');
 }
 
-function startFFmpegOnce({ baseVideo, audioFile, rtmpUrl, trackText, showCTA, ctaText, trackSeconds, ctaSeconds }) {
+function startFFmpegOnce({ baseVideo, rtmpUrl, trackText, showCTA, ctaText, trackSeconds, ctaSeconds }) {
   const filter = buildFilterComplex({ trackText, showCTA, ctaText, trackSeconds, ctaSeconds });
 
   const args = [
+    // Reconexão automática caso o YouTube feche o RTMP
+    '-reconnect', '1',
+    '-reconnect_streamed', '1',
+    '-reconnect_delay_max', '2',
+
+    // Vídeo base em loop infinito
     '-stream_loop', '-1', '-re', '-i', baseVideo,
-'-stream_loop', '-1', '-re', '-f', 'concat', '-safe', '0', '-i', '/srv/lofi/audio/playlist.txt',
+
+    // Playlist de áudio infinita (em formato .m3u)
+    '-stream_loop', '-1', '-re', '-i', '/srv/lofi/app/api/audio/playlist.m3u',
+
+    // Filtros (overlay, textos, etc.)
     '-filter_complex', filter,
     '-map', '[vout]', '-map', '[aud]',
+
+    // Configurações de vídeo
     '-c:v', 'libx264',
     '-preset', 'veryfast',
     '-b:v', '3000k',
@@ -89,10 +101,14 @@ function startFFmpegOnce({ baseVideo, audioFile, rtmpUrl, trackText, showCTA, ct
     '-bufsize', '6000k',
     '-g', '60',
     '-pix_fmt', 'yuv420p',
+
+    // Configurações de áudio
     '-c:a', 'aac',
     '-b:a', '160k',
     '-ar', '44100',
     '-ac', '2',
+
+    // Saída para o YouTube
     '-f', 'flv', rtmpUrl
   ];
 
