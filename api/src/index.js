@@ -15,7 +15,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const RTMP_URL = process.env.RTMP_URL;
 const BASE_VIDEO = process.env.BASE_VIDEO || '/srv/lofi/video/christian-lofi.mp4';
-const AUDIO_FILE = process.env.AUDIO_FILE || '/srv/lofi/audio/lofi-worship-playlist.m4a';
+const AUDIO_FILE = process.env.AUDIO_FILE || '/srv/lofi/app/api/audio/playlist.m3u';
 
 const LIVE_TITLE = process.env.LIVE_TITLE || 'Christian Lofi Worship - Lofi Radio 24/7 | Calm Instrumentals for Focus & Study';
 const CHANNEL_NAME = process.env.CHANNEL_NAME || 'Aslan Lofi';
@@ -209,15 +209,15 @@ function startFFmpegOnce({ baseVideo, rtmpUrl, trackText, showCTA, ctaText, trac
 
   const args = [
     // Reconexão automática caso o YouTube feche o RTMP
-    '-reconnect', '1',
-    '-reconnect_streamed', '1',
-    '-reconnect_delay_max', '2',
+    // '-reconnect', '1',
+    // '-reconnect_streamed', '1',
+    // '-reconnect_delay_max', '2',
 
     // Vídeo base em loop infinito
     '-stream_loop', '-1', '-re', '-i', baseVideo,
 
     // Playlist de áudio infinita (em formato .m3u)
-    '-stream_loop', '-1', '-re', '-i', '/srv/lofi/app/api/audio/playlist.m3u',
+    '-stream_loop', '-1', '-re', '-i', AUDIO_FILE,
 
     // Filtros (overlay, textos, etc.)
     '-filter_complex', filter,
