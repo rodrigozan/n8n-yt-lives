@@ -62,6 +62,18 @@ if (fs.existsSync(TOKENS_PATH)) {
   console.log("Tokens carregados do disco.");
 }
 
+// 🔄 Evento de refresh automático
+oauth2Client.on('tokens', (tokens) => {
+  if (tokens.refresh_token || tokens.access_token) {
+    const current = fs.existsSync(TOKENS_PATH)
+      ? JSON.parse(fs.readFileSync(TOKENS_PATH))
+      : {};
+    const newTokens = { ...current, ...tokens };
+    fs.writeFileSync(TOKENS_PATH, JSON.stringify(newTokens, null, 2));
+    console.log("Tokens atualizados e salvos em tokens.json");
+  }
+});
+
 // rota de login
 app.get('/auth', (req, res) => {
   const url = oauth2Client.generateAuthUrl({
@@ -92,6 +104,56 @@ const messages = [
   "✨ Don't forget to like 👍 the stream, it helps a lot!",
   "💬 What's your favorite verse or quote for today?",
   "🎹 Enjoying the music? Share this live with a friend!",
+  "✨ Where are you tuning in from?",
+  "📚 Time to focus, let's get this study session started.",
+  "🌙 Perfect vibes for a late night.",
+  "☕ Who else is studying with coffee right now?",
+  "💬 What are you working on today?",
+  "🎶 Music + focus = productivity unlocked.",
+  "💤 Anyone else pulling an all-nighter?",
+  "🌸 Don't forget to take breaks and drink some water.",
+  "📖 Study hard now, thank yourself later.",
+  "🔥 Let's stay motivated together!",
+  "🌍 Love how this chat is so global.",
+  "🖊️ Writing essays with these vibes feels easier.",
+  "💡 Quick tip: 25 min study, 5 min break = focus mode.",
+  "🌈 Good luck to everyone grinding tonight!",
+  "💻 Coding with lofi hits different.",
+  "🍵 Tea + lofi = ultimate chill combo.",
+  "🎓 Sending good vibes to everyone with exams soon!",
+  "✍️ What's your subject today?",
+  "🙏 Stay positive, you've got this!",
+  "🌌 Night owls, assemble!",
+  "🎧 Headphones on, world off.",
+  "🥱 Long day but the grind doesn’t stop.",
+  "💭 Anyone else just vibing and not studying?",
+  "📅 New month, new goals!",
+  "🎹 This beat is so smooth…",
+  "📊 Productivity vibes only.",
+  "🌞 Good morning from my side of the world!",
+  "📎 Remember: progress, not perfection.",
+  "✨ Small steps every day make a big difference.",
+  "💪 Stay strong, friends, we're in this together.",
+  "🎶 Praising God while we study and meditate on His Word.",
+  "🙏 Let's pray together in this moment of peace and focus.",
+  "✨ May these melodies bless your heart and mind.",
+  "📖 Meditate on Psalm 23 as the music gently plays.",
+  "💡 Tip: take a deep breath and entrust your studies to the Lord.",
+  "🎹 Worshiping with every note, even in the silence of your room.",
+  "🌙 A calm night, filled with the presence of God.",
+  "💬 Share your favorite Bible verse with the chat community.",
+  "☕ A cup of tea, soft music, and gratitude to God.",
+  "🎵 Every beat is an opportunity to worship.",
+  "🌸 Jesus calms our hearts during study and work times.",
+  "💭 Reflect on God's goodness while the lofi vibes play.",
+  "✝️ Let the music guide your prayers and thoughts.",
+  "📚 Studying with God’s presence makes everything easier.",
+  "✨ Focus, relax, and worship in every moment.",
+  "🎧 Headphones on, soul lifted, God first.",
+  "🙏 Take a pause and thank God for this day.",
+  "🎶 Instrumentals that inspire reflection and prayer.",
+  "💡 God’s peace surrounds you as you study and rest.",
+  "📖 Let the Word of God guide your thoughts today."
 ];
 
 async function sendMessageToChat(text) {
@@ -120,8 +182,8 @@ function startAutoMessages() {
     const now = Date.now();
     const diff = now - lastUserMessageTime;
 
-    if (diff > 60 * 60 * 1000) { 
-      console.log('Sem mensagens de usuário por 1h. Pausando envio por 30 min.');
+    if (diff > 120 * 60 * 1000) { 
+      console.log('Sem mensagens de usuário por 2hs. Pausando envio por 30 min.');
       clearInterval(autoMsgInterval);
       setTimeout(startAutoMessages, 30 * 60 * 1000);
       return;
@@ -129,7 +191,7 @@ function startAutoMessages() {
 
     const msg = messages[Math.floor(Math.random() * messages.length)];
     await sendMessageToChat(msg);
-  }, 10 * 60 * 1000);
+  }, 15 * 60 * 1000);
 }
 
 async function ensureLiveChatId() {
