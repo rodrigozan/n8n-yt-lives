@@ -54,6 +54,14 @@ oauth2Client = new google.auth.OAuth2(
 
 youtube = google.youtube({ version: 'v3', auth: oauth2Client });
 
+// Carregar tokens do disco se existirem
+const TOKENS_PATH = './tokens.json';
+if (fs.existsSync(TOKENS_PATH)) {
+  const tokens = JSON.parse(fs.readFileSync(TOKENS_PATH));
+  oauth2Client.setCredentials(tokens);
+  console.log("Tokens carregados do disco.");
+}
+
 // rota de login
 app.get('/auth', (req, res) => {
   const url = oauth2Client.generateAuthUrl({
@@ -68,23 +76,11 @@ app.get('/oauth2callback', async (req, res) => {
   const code = req.query.code;
   const { tokens } = await oauth2Client.getToken(code);
   oauth2Client.setCredentials(tokens);
-  res.send('Autorizado com sucesso! Tokens salvos na memória.');
-  console.log('Tokens recebidos:', tokens);
 
-  // pegar liveChatId da live ativa
-  const liveRes = await youtube.liveBroadcasts.list({
-    part: 'snippet',
-    broadcastStatus: 'active',
-    broadcastType: 'all'
-  });
+  fs.writeFileSync(TOKENS_PATH, JSON.stringify(tokens, null, 2));
+  console.log('Tokens salvos em tokens.json');
 
-  if (liveRes.data.items.length > 0) {
-    liveChatId = liveRes.data.items[0].snippet.liveChatId;
-    console.log('Live chat ativo encontrado:', liveChatId);
-
-    // inicia o monitoramento do chat
-    startAutoMessages();
-  }
+  res.send('Autorizado com sucesso! Pode iniciar o /stream/start agora.');
 });
 
 // -----------------------
@@ -117,7 +113,6 @@ async function sendMessageToChat(text) {
   }
 }
 
-// loop automático
 function startAutoMessages() {
   if (autoMsgInterval) clearInterval(autoMsgInterval);
 
@@ -128,61 +123,52 @@ function startAutoMessages() {
     if (diff > 60 * 60 * 1000) { 
       console.log('Sem mensagens de usuário por 1h. Pausando envio por 30 min.');
       clearInterval(autoMsgInterval);
-      setTimeout(startAutoMessages, 30 * 60 * 1000); // pausa 30 min
+      setTimeout(startAutoMessages, 30 * 60 * 1000);
       return;
     }
 
     const msg = messages[Math.floor(Math.random() * messages.length)];
     await sendMessageToChat(msg);
-  }, 10 * 60 * 1000); // a cada 10 minutos
+  }, 10 * 60 * 1000);
 }
 
-// monitoramento do chat para detectar mensagens de usuários
-async function pollChat() {
-  if (!liveChatId) return;
+async function ensureLiveChatId() {
+  if (liveChatId) return;
   try {
-    const res = await youtube.liveChatMessages.list({
-      liveChatId,
-      part: 'snippet,authorDetails',
-      maxResults: 50
+    const liveRes = await youtube.liveBroadcasts.list({
+      part: 'snippet',
+      broadcastStatus: 'active',
+      broadcastType: 'all'
     });
 
-    if (res.data.items) {
-      for (const item of res.data.items) {
-        if (!item.authorDetails.isChatModerator && !item.authorDetails.isChatOwner) {
-          lastUserMessageTime = Date.now();
-        }
-      }
+    if (liveRes.data.items.length > 0) {
+      liveChatId = liveRes.data.items[0].snippet.liveChatId;
+      console.log('Live chat ativo encontrado:', liveChatId);
     }
   } catch (err) {
-    console.error('Erro ao monitorar chat:', err.message);
+    console.error("Erro ao buscar liveChatId:", err.message);
   }
-  setTimeout(pollChat, 15000); // a cada 15s
 }
 
-
-
-// Util: sanitiza texto para drawtext
+// -----------------------
+// FFmpeg + Stream
+// -----------------------
 function sanitizeTextForDrawtext(text) {
   if (!text) return '';
   return String(text)
-    .replace(/\\/g, '\\\\')  // barra invertida
-    .replace(/:/g, '\\:')    // dois-pontos
-    .replace(/'/g, "\\'")    // aspas simples
+    .replace(/\\/g, '\\\\')
+    .replace(/:/g, '\\:')
+    .replace(/'/g, "\\'")
     .replace(/\n/g, ' ')
     .replace(/\r/g, ' ');
 }
 
-// Monta exatamente o filtro que funcionou no seu teste manual:
-// scale 1280x720, caixa inferior fixa e CTA no topo.
 function buildFilterComplex({ trackText, showCTA, ctaText, trackSeconds, ctaSeconds }) {
   const trackTextSan = sanitizeTextForDrawtext(trackText);
   const ctaTextSan = sanitizeTextForDrawtext(ctaText);
 
   const parts = [];
-  // Áudio
   parts.push(`[1:a]loudnorm=I=-14:TP=-1.5:LRA=11[aud]`);
-  // Vídeo base + overlays
   parts.push(
     `[0:v]scale=1280:720,format=yuv420p,` +
       `drawbox=x=0:y=600:w=1280:h=120:color=0x00000088:t=fill:enable='between(t,0,${trackSeconds})',` +
@@ -208,22 +194,10 @@ function startFFmpegOnce({ baseVideo, rtmpUrl, trackText, showCTA, ctaText, trac
   const filter = buildFilterComplex({ trackText, showCTA, ctaText, trackSeconds, ctaSeconds });
 
   const args = [
-    // Reconexão automática caso o YouTube feche o RTMP
-    // '-reconnect', '1',
-    // '-reconnect_streamed', '1',
-    // '-reconnect_delay_max', '2',
-
-    // Vídeo base em loop infinito
     '-stream_loop', '-1', '-re', '-i', baseVideo,
-
-    // Playlist de áudio infinita (em formato .m3u)
     '-stream_loop', '-1', '-re', '-i', AUDIO_FILE,
-
-    // Filtros (overlay, textos, etc.)
     '-filter_complex', filter,
     '-map', '[vout]', '-map', '[aud]',
-
-    // Configurações de vídeo
     '-c:v', 'libx264',
     '-preset', 'veryfast',
     '-b:v', '3000k',
@@ -231,14 +205,10 @@ function startFFmpegOnce({ baseVideo, rtmpUrl, trackText, showCTA, ctaText, trac
     '-bufsize', '6000k',
     '-g', '60',
     '-pix_fmt', 'yuv420p',
-
-    // Configurações de áudio
     '-c:a', 'aac',
     '-b:a', '160k',
     '-ar', '44100',
     '-ac', '2',
-
-    // Saída para o YouTube
     '-f', 'flv', rtmpUrl
   ];
 
@@ -254,22 +224,28 @@ function startFFmpegOnce({ baseVideo, rtmpUrl, trackText, showCTA, ctaText, trac
   });
 }
 
+// -----------------------
 // Rotas
+// -----------------------
 app.get('/health', (req, res) => {
   res.json({
     ok: true,
     ffmpegRunning: !!ffmpegProc,
     baseVideoExists: fs.existsSync(BASE_VIDEO),
-    audioFileExists: fs.existsSync(AUDIO_FILE)
+    audioFileExists: fs.existsSync(AUDIO_FILE),
+    youtubeAuth: !!oauth2Client.credentials.access_token
   });
 });
 
-app.post('/stream/start', (req, res) => {
+app.post('/stream/start', async (req, res) => {
   if (ffmpegProc) return res.json({ ok: true, msg: 'Já está transmitindo' });
 
   if (!RTMP_URL) return res.status(400).json({ ok: false, msg: 'RTMP_URL ausente' });
   if (!fs.existsSync(BASE_VIDEO)) return res.status(400).json({ ok: false, msg: `BASE_VIDEO não encontrado: ${BASE_VIDEO}` });
   if (!fs.existsSync(AUDIO_FILE)) return res.status(400).json({ ok: false, msg: `AUDIO_FILE não encontrado: ${AUDIO_FILE}` });
+
+  await ensureLiveChatId();
+  startAutoMessages();
 
   const title = req.body?.title || TRACK_TITLE;
   const artist = req.body?.artist || TRACK_ARTIST;
@@ -295,7 +271,7 @@ app.post('/stream/start', (req, res) => {
     ctaSeconds: CTA_SECONDS
   });
 
-  res.json({ ok: true });
+  res.json({ ok: true, msg: 'Streaming + Auto Messages iniciado' });
 });
 
 app.post('/stream/stop', (req, res) => {
