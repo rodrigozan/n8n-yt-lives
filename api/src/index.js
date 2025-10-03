@@ -14,8 +14,8 @@ app.use(express.json());
 // Env
 const PORT = process.env.PORT || 3000;
 const RTMP_URL = process.env.RTMP_URL;
-const BASE_VIDEO = process.env.BASE_VIDEO || '/srv/lofi/video/christian-lofi.mp4';
-const AUDIO_FILE = process.env.AUDIO_FILE || '/srv/lofi/app/api/audio/playlist.m3u';
+const BASE_VIDEO = process.env.BASE_VIDEO;
+const AUDIO_FILE = process.env.AUDIO_FILE;
 
 const LIVE_TITLE = process.env.LIVE_TITLE || 'Christian Lofi Worship - Lofi Radio 24/7 | Calm Instrumentals for Focus & Study';
 const CHANNEL_NAME = process.env.CHANNEL_NAME || 'Aslan Lofi';
