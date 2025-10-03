@@ -35,6 +35,7 @@ const CTA_TEXT_TEMPLATE =
 
 const TRACK_OVERLAY_SECONDS = Number(process.env.TRACK_OVERLAY_SECONDS || 6);
 const CTA_SECONDS = Number(process.env.CTA_SECONDS || 5);
+const FONT_FILE = process.env.FONT_FILE || '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
 
 // YouTube API credentials
 const YT_CLIENT_ID = process.env.YT_CLIENT_ID;
@@ -108,14 +109,14 @@ function buildFilterComplex({
   parts.push(
     `[0:v]scale=1280:720,format=yuv420p,` +
       `drawbox=x=0:y=600:w=1280:h=120:color=0x00000088:t=fill:enable='between(t,0,${trackSeconds})',` +
-      `drawtext=fontfile=C\\:/Windows/Fonts/arial.ttf:` + // fonte ajustada p/ Windows
+      `drawtext=fontfile=${FONT_FILE}:` +
       `text='${trackTextSan}':x=20:y=640:fontsize=36:fontcolor=white:` +
       `enable='between(t,0,${trackSeconds})'[vtmp]`
   );
 
   if (showCTA) {
     parts.push(
-      `[vtmp]drawtext=fontfile=C\\:/Windows/Fonts/arial.ttf:` +
+      `[vtmp]drawtext=fontfile=${FONT_FILE}:` +
         `text='${ctaTextSan}':x='(w-text_w)/2':y=40:fontsize=30:fontcolor=white:box=1:boxcolor=0x00000088:` +
         `enable='between(t,0,${ctaSeconds})'[vout]`
     );
@@ -256,48 +257,28 @@ function startFFmpegOnce({
     ctaSeconds,
   });
 
+  // Se for playlist .m3u → usa concat
+  const audioArgs = audioFile.endsWith(".m3u")
+    ? ["-f", "concat", "-safe", "0", "-i", audioFile]
+    : ["-stream_loop", "-1", "-re", "-i", audioFile];
+
   const args = [
-    "-stream_loop",
-    "-1",
-    "-re",
-    "-i",
-    baseVideo,
-    "-stream_loop",
-    "-1",
-    "-re",
-    "-i",
-    audioFile,
-    "-filter_complex",
-    filter,
-    "-map",
-    "[vout]",
-    "-map",
-    "[aud]",
-    "-c:v",
-    "libx264",
-    "-preset",
-    "veryfast",
-    "-b:v",
-    "3000k",
-    "-maxrate",
-    "3000k",
-    "-bufsize",
-    "6000k",
-    "-g",
-    "60",
-    "-pix_fmt",
-    "yuv420p",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "160k",
-    "-ar",
-    "44100",
-    "-ac",
-    "2",
-    "-f",
-    "flv",
-    rtmpUrl,
+    "-stream_loop", "-1", "-re", "-i", baseVideo,
+    ...audioArgs,
+    "-filter_complex", filter,
+    "-map", "[vout]", "-map", "[aud]",
+    "-c:v", "libx264",
+    "-preset", "veryfast",
+    "-b:v", "3000k",
+    "-maxrate", "3000k",
+    "-bufsize", "6000k",
+    "-g", "60",
+    "-pix_fmt", "yuv420p",
+    "-c:a", "aac",
+    "-b:a", "160k",
+    "-ar", "44100",
+    "-ac", "2",
+    "-f", "flv", rtmpUrl,
   ];
 
   console.log("Iniciando FFmpeg...");
@@ -310,6 +291,7 @@ function startFFmpegOnce({
     ffmpegProc = null;
   });
 }
+
 
 // -----------------------
 // Rotas
