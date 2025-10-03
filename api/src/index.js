@@ -54,7 +54,7 @@ oauth2Client = new google.auth.OAuth2(
 
 youtube = google.youtube({ version: 'v3', auth: oauth2Client });
 
-// Carregar tokens do disco se existirem
+// Carregar tokens do disco
 const TOKENS_PATH = './tokens.json';
 if (fs.existsSync(TOKENS_PATH)) {
   const tokens = JSON.parse(fs.readFileSync(TOKENS_PATH));
@@ -62,7 +62,7 @@ if (fs.existsSync(TOKENS_PATH)) {
   console.log("Tokens carregados do disco.");
 }
 
-// 🔄 Evento de refresh automático
+// Refresh automático
 oauth2Client.on('tokens', (tokens) => {
   if (tokens.refresh_token || tokens.access_token) {
     const current = fs.existsSync(TOKENS_PATH)
@@ -74,146 +74,8 @@ oauth2Client.on('tokens', (tokens) => {
   }
 });
 
-// rota de login
-app.get('/auth', (req, res) => {
-  const url = oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    scope: ['https://www.googleapis.com/auth/youtube.force-ssl']
-  });
-  res.redirect(url);
-});
-
-// rota de callback
-app.get('/oauth2callback', async (req, res) => {
-  const code = req.query.code;
-  const { tokens } = await oauth2Client.getToken(code);
-  oauth2Client.setCredentials(tokens);
-
-  fs.writeFileSync(TOKENS_PATH, JSON.stringify(tokens, null, 2));
-  console.log('Tokens salvos em tokens.json');
-
-  res.send('Autorizado com sucesso! Pode iniciar o /stream/start agora.');
-});
-
 // -----------------------
-// Auto mensagens no chat
-// -----------------------
-const messages = [
-  "🎶 Hi guys, welcome to the live! Where are you watching from?",
-  "🙏 Lofi Worship 24/7 — relax, study and pray with us.",
-  "✨ Don't forget to like 👍 the stream, it helps a lot!",
-  "💬 What's your favorite verse or quote for today?",
-  "🎹 Enjoying the music? Share this live with a friend!",
-  "✨ Where are you tuning in from?",
-  "📚 Time to focus, let's get this study session started.",
-  "🌙 Perfect vibes for a late night.",
-  "☕ Who else is studying with coffee right now?",
-  "💬 What are you working on today?",
-  "🎶 Music + focus = productivity unlocked.",
-  "💤 Anyone else pulling an all-nighter?",
-  "🌸 Don't forget to take breaks and drink some water.",
-  "📖 Study hard now, thank yourself later.",
-  "🔥 Let's stay motivated together!",
-  "🌍 Love how this chat is so global.",
-  "🖊️ Writing essays with these vibes feels easier.",
-  "💡 Quick tip: 25 min study, 5 min break = focus mode.",
-  "🌈 Good luck to everyone grinding tonight!",
-  "💻 Coding with lofi hits different.",
-  "🍵 Tea + lofi = ultimate chill combo.",
-  "🎓 Sending good vibes to everyone with exams soon!",
-  "✍️ What's your subject today?",
-  "🙏 Stay positive, you've got this!",
-  "🌌 Night owls, assemble!",
-  "🎧 Headphones on, world off.",
-  "🥱 Long day but the grind doesn’t stop.",
-  "💭 Anyone else just vibing and not studying?",
-  "📅 New month, new goals!",
-  "🎹 This beat is so smooth…",
-  "📊 Productivity vibes only.",
-  "🌞 Good morning from my side of the world!",
-  "📎 Remember: progress, not perfection.",
-  "✨ Small steps every day make a big difference.",
-  "💪 Stay strong, friends, we're in this together.",
-  "🎶 Praising God while we study and meditate on His Word.",
-  "🙏 Let's pray together in this moment of peace and focus.",
-  "✨ May these melodies bless your heart and mind.",
-  "📖 Meditate on Psalm 23 as the music gently plays.",
-  "💡 Tip: take a deep breath and entrust your studies to the Lord.",
-  "🎹 Worshiping with every note, even in the silence of your room.",
-  "🌙 A calm night, filled with the presence of God.",
-  "💬 Share your favorite Bible verse with the chat community.",
-  "☕ A cup of tea, soft music, and gratitude to God.",
-  "🎵 Every beat is an opportunity to worship.",
-  "🌸 Jesus calms our hearts during study and work times.",
-  "💭 Reflect on God's goodness while the lofi vibes play.",
-  "✝️ Let the music guide your prayers and thoughts.",
-  "📚 Studying with God’s presence makes everything easier.",
-  "✨ Focus, relax, and worship in every moment.",
-  "🎧 Headphones on, soul lifted, God first.",
-  "🙏 Take a pause and thank God for this day.",
-  "🎶 Instrumentals that inspire reflection and prayer.",
-  "💡 God’s peace surrounds you as you study and rest.",
-  "📖 Let the Word of God guide your thoughts today."
-];
-
-async function sendMessageToChat(text) {
-  if (!liveChatId) return;
-  try {
-    await youtube.liveChatMessages.insert({
-      part: 'snippet',
-      requestBody: {
-        snippet: {
-          liveChatId,
-          type: 'textMessageEvent',
-          textMessageDetails: { messageText: text }
-        }
-      }
-    });
-    console.log('Mensagem enviada:', text);
-  } catch (err) {
-    console.error('Erro ao enviar mensagem:', err.message);
-  }
-}
-
-function startAutoMessages() {
-  if (autoMsgInterval) clearInterval(autoMsgInterval);
-
-  autoMsgInterval = setInterval(async () => {
-    const now = Date.now();
-    const diff = now - lastUserMessageTime;
-
-    if (diff > 120 * 60 * 1000) { 
-      console.log('Sem mensagens de usuário por 2hs. Pausando envio por 30 min.');
-      clearInterval(autoMsgInterval);
-      setTimeout(startAutoMessages, 30 * 60 * 1000);
-      return;
-    }
-
-    const msg = messages[Math.floor(Math.random() * messages.length)];
-    await sendMessageToChat(msg);
-  }, 15 * 60 * 1000);
-}
-
-async function ensureLiveChatId() {
-  if (liveChatId) return;
-  try {
-    const liveRes = await youtube.liveBroadcasts.list({
-      part: 'snippet',
-      broadcastStatus: 'active',
-      broadcastType: 'all'
-    });
-
-    if (liveRes.data.items.length > 0) {
-      liveChatId = liveRes.data.items[0].snippet.liveChatId;
-      console.log('Live chat ativo encontrado:', liveChatId);
-    }
-  } catch (err) {
-    console.error("Erro ao buscar liveChatId:", err.message);
-  }
-}
-
-// -----------------------
-// FFmpeg + Stream
+// Utils
 // -----------------------
 function sanitizeTextForDrawtext(text) {
   if (!text) return '';
@@ -234,14 +96,14 @@ function buildFilterComplex({ trackText, showCTA, ctaText, trackSeconds, ctaSeco
   parts.push(
     `[0:v]scale=1280:720,format=yuv420p,` +
       `drawbox=x=0:y=600:w=1280:h=120:color=0x00000088:t=fill:enable='between(t,0,${trackSeconds})',` +
-      `drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:` +
+      `drawtext=fontfile=C\\:/Windows/Fonts/arial.ttf:` + // fonte ajustada p/ Windows
       `text='${trackTextSan}':x=20:y=640:fontsize=36:fontcolor=white:` +
       `enable='between(t,0,${trackSeconds})'[vtmp]`
   );
 
   if (showCTA) {
     parts.push(
-      `[vtmp]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:` +
+      `[vtmp]drawtext=fontfile=C\\:/Windows/Fonts/arial.ttf:` +
       `text='${ctaTextSan}':x='(w-text_w)/2':y=40:fontsize=30:fontcolor=white:box=1:boxcolor=0x00000088:` +
       `enable='between(t,0,${ctaSeconds})'[vout]`
     );
@@ -252,12 +114,15 @@ function buildFilterComplex({ trackText, showCTA, ctaText, trackSeconds, ctaSeco
   return parts.join(';');
 }
 
-function startFFmpegOnce({ baseVideo, rtmpUrl, trackText, showCTA, ctaText, trackSeconds, ctaSeconds }) {
+// -----------------------
+// FFmpeg Start
+// -----------------------
+function startFFmpegOnce({ baseVideo, audioFile, rtmpUrl, trackText, showCTA, ctaText, trackSeconds, ctaSeconds }) {
   const filter = buildFilterComplex({ trackText, showCTA, ctaText, trackSeconds, ctaSeconds });
 
   const args = [
     '-stream_loop', '-1', '-re', '-i', baseVideo,
-    '-stream_loop', '-1', '-re', '-i', AUDIO_FILE,
+    '-stream_loop', '-1', '-re', '-i', audioFile,
     '-filter_complex', filter,
     '-map', '[vout]', '-map', '[aud]',
     '-c:v', 'libx264',
@@ -267,6 +132,7 @@ function startFFmpegOnce({ baseVideo, rtmpUrl, trackText, showCTA, ctaText, trac
     '-bufsize', '6000k',
     '-g', '60',
     '-pix_fmt', 'yuv420p',
+    // 🔑 ajuste aqui → sempre reencode áudio para AAC (compatível YouTube)
     '-c:a', 'aac',
     '-b:a', '160k',
     '-ar', '44100',
@@ -278,7 +144,6 @@ function startFFmpegOnce({ baseVideo, rtmpUrl, trackText, showCTA, ctaText, trac
   console.log('FILTER_COMPLEX:\n', filter);
   ffmpegProc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
-  ffmpegProc.stdout.on('data', d => process.stdout.write(d.toString()));
   ffmpegProc.stderr.on('data', d => process.stdout.write(d.toString()));
   ffmpegProc.on('close', code => {
     console.log('FFmpeg finalizado com código:', code);
@@ -306,34 +171,22 @@ app.post('/stream/start', async (req, res) => {
   if (!fs.existsSync(BASE_VIDEO)) return res.status(400).json({ ok: false, msg: `BASE_VIDEO não encontrado: ${BASE_VIDEO}` });
   if (!fs.existsSync(AUDIO_FILE)) return res.status(400).json({ ok: false, msg: `AUDIO_FILE não encontrado: ${AUDIO_FILE}` });
 
-  await ensureLiveChatId();
-  startAutoMessages();
-
-  const title = req.body?.title || TRACK_TITLE;
-  const artist = req.body?.artist || TRACK_ARTIST;
-  const showCTA = req.body?.showCta ?? SHOW_CTA;
-  const ctaTextRaw = req.body?.ctaText || CTA_TEXT_TEMPLATE;
-
-  const trackText = (req.body?.trackText || OVERLAY_TRACK_TEMPLATE)
-    .replace('{title}', title)
-    .replace('{artist}', artist);
-
-  const ctaText = ctaTextRaw
-    .replace('{live_title}', LIVE_TITLE)
-    .replace('{channel_name}', CHANNEL_NAME);
-
   startFFmpegOnce({
     baseVideo: BASE_VIDEO,
     audioFile: AUDIO_FILE,
     rtmpUrl: RTMP_URL,
-    trackText,
-    showCTA,
-    ctaText,
+    trackText: (req.body?.trackText || OVERLAY_TRACK_TEMPLATE)
+      .replace('{title}', req.body?.title || TRACK_TITLE)
+      .replace('{artist}', req.body?.artist || TRACK_ARTIST),
+    showCTA: req.body?.showCta ?? SHOW_CTA,
+    ctaText: (req.body?.ctaText || CTA_TEXT_TEMPLATE)
+      .replace('{live_title}', LIVE_TITLE)
+      .replace('{channel_name}', CHANNEL_NAME),
     trackSeconds: TRACK_OVERLAY_SECONDS,
     ctaSeconds: CTA_SECONDS
   });
 
-  res.json({ ok: true, msg: 'Streaming + Auto Messages iniciado' });
+  res.json({ ok: true, msg: 'Streaming iniciado' });
 });
 
 app.post('/stream/stop', (req, res) => {
