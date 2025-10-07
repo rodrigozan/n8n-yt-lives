@@ -49,6 +49,8 @@ let youtube;
 let liveChatId = null;
 let lastUserMessageTime = Date.now();
 let autoMsgInterval;
+let lastStreamParams = null;
+const RESTART_DELAY_MS = 30000; 
 
 // -----------------------
 // Google OAuth2
@@ -239,16 +241,30 @@ async function ensureLiveChatId() {
 // -----------------------
 // FFmpeg Start
 // -----------------------
-function startFFmpegOnce({
-  baseVideo,
-  audioFile,
-  rtmpUrl,
-  trackText,
-  showCTA,
-  ctaText,
-  trackSeconds,
-  ctaSeconds,
-}) {
+// -----------------------
+// FFmpeg Start - Versão Corrigida
+// -----------------------
+function startFFmpegOnce(params) {
+  // 1. Armazena os parâmetros antes de iniciar (para uso no reinício)
+  lastStreamParams = params; 
+
+  const {
+    baseVideo,
+    audioFile,
+    rtmpUrl,
+    trackText,
+    showCTA,
+    ctaText,
+    trackSeconds,
+    ctaSeconds,
+  } = params;
+
+  // Evita iniciar um processo se um já estiver rodando
+  if (ffmpegProc) {
+    console.warn("FFmpeg já está rodando. Ignorando nova inicialização.");
+    return;
+  }
+  
   const filter = buildFilterComplex({
     trackText,
     showCTA,
@@ -286,9 +302,34 @@ function startFFmpegOnce({
   ffmpegProc = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
 
   ffmpegProc.stderr.on("data", (d) => process.stdout.write(d.toString()));
+  
+  // 2. Lógica de monitoramento e reinício do FFmpeg
   ffmpegProc.on("close", (code) => {
     console.log("FFmpeg finalizado com código:", code);
-    ffmpegProc = null;
+    
+    // O código de saída 0 ou null (geralmente SIGINT/SIGTERM) são considerados encerramentos esperados.
+    // Qualquer outro código (ex: 1, 255) ou falta de código é uma falha inesperada.
+    if (code !== 0 && code !== null) { 
+      console.error(
+        `FFmpeg falhou (Código: ${code}). Tentando REINICIAR em ${RESTART_DELAY_MS / 1000} segundos...`
+      );
+      
+      // Usa setTimeout para atrasar a reinicialização e dar tempo ao sistema/rede para se recuperar
+      setTimeout(() => {
+        if (lastStreamParams) {
+          console.log("Reiniciando FFmpeg com os últimos parâmetros...");
+          // Chama a própria função para reiniciar o streaming
+          startFFmpegOnce(lastStreamParams); 
+        } else {
+          console.error("Não há parâmetros armazenados para reiniciar o streaming. Abortando.");
+        }
+      }, RESTART_DELAY_MS);
+    } else {
+        console.log("FFmpeg finalizado de forma esperada/manual. Não será reiniciado.");
+    }
+    
+    // Limpa o estado da variável ffmpegProc APÓS a decisão de reinício
+    ffmpegProc = null; 
   });
 }
 
@@ -320,7 +361,7 @@ app.post("/stream/start", async (req, res) => {
       .status(400)
       .json({ ok: false, msg: `AUDIO_FILE não encontrado: ${AUDIO_FILE}` });
 
-  startFFmpegOnce({
+  const streamParams = {
     baseVideo: BASE_VIDEO,
     audioFile: AUDIO_FILE,
     rtmpUrl: RTMP_URL,
@@ -333,7 +374,10 @@ app.post("/stream/start", async (req, res) => {
       .replace("{channel_name}", CHANNEL_NAME),
     trackSeconds: TRACK_OVERLAY_SECONDS,
     ctaSeconds: CTA_SECONDS,
-  });
+  };
+  
+  // Chama com os parâmetros criados. A função armazena e inicia.
+  startFFmpegOnce(streamParams);
 
   await ensureLiveChatId();
   startAutoMessages();
