@@ -12,7 +12,7 @@ app.use(cors());
 app.use(express.json());
 
 // Env
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 const RTMP_URL = process.env.RTMP_URL;
 const BASE_VIDEO = process.env.BASE_VIDEO;
 const AUDIO_FILE = process.env.AUDIO_FILE;
@@ -392,39 +392,6 @@ app.post("/stream/stop", (req, res) => {
   ffmpegProc = null;
   res.json({ ok: true });
 });
-
-app.get("/auth/youtube", (req, res) => {
-  const scopes = [
-    "https://www.googleapis.com/auth/youtube.force-ssl",
-    "https://www.googleapis.com/auth/youtube.readonly",
-    "https://www.googleapis.com/auth/youtube.liveBroadcast",
-    "https://www.googleapis.com/auth/youtube.liveStreaming",
-    "https://www.googleapis.com/auth/youtube.liveChatMessages",
-  ];
-
-  const url = oauth2Client.generateAuthUrl({
-    access_type: "offline",
-    scope: scopes,
-    prompt: "consent",
-  });
-
-  res.redirect(url);
-});
-
-app.get("/auth/callback", async (req, res) => {
-  const code = req.query.code;
-  try {
-    const { tokens } = await oauth2Client.getToken(code);
-    oauth2Client.setCredentials(tokens);
-    fs.writeFileSync("./tokens.json", JSON.stringify(tokens, null, 2));
-    res.send("✅ Autenticação concluída e tokens salvos.");
-    console.log("Tokens salvos:", tokens);
-  } catch (err) {
-    console.error("Erro no callback:", err.message);
-    res.status(500).send("Erro ao autenticar: " + err.message);
-  }
-});
-
 
 app.listen(PORT, () => {
   console.log(`API rodando na porta ${PORT}`);

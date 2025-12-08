@@ -1,4 +1,7 @@
 node_modules
 api/.env
 api/tokens.json
+api-short/.env
+api-short/tokens.json
 infos.txt
+
